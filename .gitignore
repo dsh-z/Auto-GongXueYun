@@ -10,3 +10,7 @@ cv2/
 *.bat
 
 probe_api.py
+gh_token.txt
+last-run.txt
+clockin.log
+user.json
