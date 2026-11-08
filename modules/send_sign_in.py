@@ -13,7 +13,7 @@ shanghai_tz = timezone(timedelta(hours=8))
 gmt_time = datetime.now(shanghai_tz)
 now = datetime.now(shanghai_tz)
 # 以17时为分界线, 判断打卡是上班还是下班
-is_start = now.hour < 17
+is_start = now.hour < 12
 # 中文映射字典, 用于控制台输出罢了
 sign_type_mapping = {"START": "上班", "END": "下班"}
 # 收集所有线程签到结果
@@ -83,13 +83,9 @@ def send_sign_in(user_info, timeout):
             return
         # 打印完整的打卡响应内容
         dprint(f"{user_info_prefix}打卡响应: {full_response}\n")
-        # 构建推送消息
-        data=[{
-            "phone":user_info["phone"],
-            "leixing":signType,
-            "jieguo":msg
-        }]
-        requests.post("http://47.95.156.189:52020/dbinfo/postshuju1",data=json.dumps(data))
+        # 隐私加固：原版此处会把「手机号 + 打卡类型 + 结果」以明文 HTTP POST 到
+        # 作者自建的统计服务器（阿里云北京 IP）。打卡场景下这等于把你的打卡
+        # 轨迹持续外传，已整段移除。
         pushSignType = "上班" if signType == "START" else "下班"
         pushSignIsOK = "成功！" if signResp else "失败！"
         signStatus = "打卡"

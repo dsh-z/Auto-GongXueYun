@@ -3,37 +3,48 @@ name: "打卡"
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 23 * * *"  # 上班卡-每天7点50分
-    - cron: "05 00 * * *"  # 额外打卡检查(避免漏签)-每天8点05分
-    - cron: "01 10 * * *"  # 下班卡-每天18点01分
-    - cron: "30 10 * * *"  # 额外打卡检查(避免漏签)-每天18点30分
+    # ⚠️ GitHub Actions 的 cron 一律按 UTC，北京时间需要 -8 小时换算。
+    # 下面每条注释都标了实际北京时间。
+    # 上班卡：07:30 / 08:05 / 09:10 / 10:00
+    - cron: "30 23 * * *"   # 北京 07:30
+    - cron: "05 00 * * *"   # 北京 08:05
+    - cron: "10 01 * * *"   # 北京 09:10
+    - cron: "00 02 * * *"   # 北京 10:00
+    # 下班卡：18:00 / 18:30 / 19:00 / 19:30
+    - cron: "00 10 * * *"   # 北京 18:00
+    - cron: "30 10 * * *"   # 北京 18:30
+    - cron: "00 11 * * *"   # 北京 19:00
+    - cron: "30 11 * * *"   # 北京 19:30
+
+# 避免定时与手动触发叠加导致的并发（脚本自身也有 check_sign 去重，这是第二道保险）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+
     - name: Set up Python 3.8
       uses: actions/setup-python@v4
       with:
         python-version: '3.8'
-        
+
     - name: Install depend
       run: |
-        pip install certifi
-        pip install cffi
-        pip install charset-normalizer
-        pip install cryptography
-        pip install idna
-        pip install numpy
-        pip install opencv-python
-        pip install pycparser
-        pip install requests
-        pip install urllib3
+        python -m pip install --upgrade pip
+        pip install certifi cffi charset-normalizer cryptography idna
+        pip install numpy opencv-python-headless pycparser requests urllib3
 
     - name: Start sign
       env:
         USER: ${{ secrets.USER }}
+        # 关键修复：容器默认 UTC，而脚本用 now.hour 判断上/下班，
+        # 不设 TZ 会导致 18 点的下班卡被判定成上班卡（原版仅有此隐患）。
+        TZ: Asia/Shanghai
       run: |
         python index.py
