@@ -1,24 +1,13 @@
 name: "打卡"
 
+# 触发方式：仅手动 + 开机（由本机计划任务在登录后调用 API 触发）
+# 每天只要一条记录：脚本自身会查今日记录，已有则直接跳过，
+# 所以即使一天触发多次，实际最多只产生一条打卡记录。
 on:
   workflow_dispatch:
-  schedule:
-    # ⚠️ GitHub Actions 的 cron 一律按 UTC，北京时间需要 -8 小时换算。
-    # 下面每条注释都标了实际北京时间。
-    # 上班卡：07:30 / 08:05 / 09:10 / 10:00
-    - cron: "30 23 * * *"   # 北京 07:30
-    - cron: "05 00 * * *"   # 北京 08:05
-    - cron: "10 01 * * *"   # 北京 09:10
-    - cron: "00 02 * * *"   # 北京 10:00
-    # 下班卡：18:00 / 18:30 / 19:00 / 19:30
-    - cron: "00 10 * * *"   # 北京 18:00
-    - cron: "30 10 * * *"   # 北京 18:30
-    - cron: "00 11 * * *"   # 北京 19:00
-    - cron: "30 11 * * *"   # 北京 19:30
 
-# 避免定时与手动触发叠加导致的并发（脚本自身也有 check_sign 去重，这是第二道保险）
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: gxy-clockin
   cancel-in-progress: false
 
 jobs:
@@ -43,8 +32,8 @@ jobs:
     - name: Start sign
       env:
         USER: ${{ secrets.USER }}
-        # 关键修复：容器默认 UTC，而脚本用 now.hour 判断上/下班，
-        # 不设 TZ 会导致 18 点的下班卡被判定成上班卡（原版仅有此隐患）。
+        # 必须显式设为北京时间：容器默认 UTC，脚本用本地时间做日期判断，
+        # 不设置会导致跨零点时「今天」算错一天。
         TZ: Asia/Shanghai
       run: |
         python index.py

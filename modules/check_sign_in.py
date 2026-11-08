@@ -1,13 +1,12 @@
 import requests
 from modules.load_config import dprint
+from modules.map_headers import header_user_agent
 from datetime import datetime, timedelta
 
 
 # 查用户是否已经打卡
-def check_sign(check_sign_token, sign_type):
+def check_sign(check_sign_token, sign_type, user=None):
     check_sign_url = "https://api.moguding.net:9000/attendence/clock/v2/listSynchro"
-    # 获取整个月的打卡信息
-    # search_start_time, search_end_time = get_current_month()
 
     # 获取当天的打卡信息
     search_start_time, search_end_time = get_current_day()
@@ -15,16 +14,37 @@ def check_sign(check_sign_token, sign_type):
         "startTime": search_start_time,
         "endTime": search_end_time,
     }
-    headers = {"Authorization": f"{check_sign_token}"}
-    response = requests.post(check_sign_url, json=data, headers=headers)
+    # 关键：必须带 roleKey 和 user-agent。
+    # 原版只发 Authorization，服务端会返回 code=403
+    # 「非法请求，禁止访问:<你的IP>」—— 这句话会把人误导成"IP 被拉黑"，
+    # 实测同一 IP 只要补上这两个头就立刻 200 success。
+    headers = {
+        "Authorization": f"{check_sign_token}",
+        "roleKey": "student",
+        "content-type": "application/json; charset=UTF-8",
+    }
+    if user is not None:
+        headers["user-agent"] = header_user_agent(user)
+    else:
+        headers["user-agent"] = "Dart/2.17 (dart:io)"
+
+    response = requests.post(check_sign_url, json=data, headers=headers, timeout=30)
     response_data = response.json()
 
-    # ❗开发环境输出, 打印打卡记录的响应内容
-    # dprint(response_data)
+    if response_data.get("code") != 200:
+        # 不要把接口错误当成"没打过卡"，否则会重复提交打卡
+        print(f"   查询打卡记录失败: code={response_data.get('code')} "
+              f"msg={response_data.get('msg')}")
+        return None
+
+    records = response_data.get("data")
+    if not isinstance(records, list):
+        print(f"   查询返回结构异常，已跳过重复检查: {str(records)[:120]}")
+        return None
 
     # 检查是否有过打卡记录
-    for record in response_data["data"]:
-        if record["type"] == sign_type:
+    for record in records:
+        if record.get("type") == sign_type:
             # 打过卡
             return True
     # 没打过卡
