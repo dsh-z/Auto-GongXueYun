@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工学云打卡面板</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --card2:#1e222b; --line:#2a2f3a;
+    --txt:#e6e9ef; --dim:#8b93a3; --ok:#3ecf8e; --warn:#f5a623; --bad:#ff5d5d; --accent:#4c8dff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:14px}
+  .wrap{max-width:1080px;margin:0 auto;padding:22px 18px 60px}
+  header{display:flex;align-items:center;justify-content:space-between;
+         gap:14px;flex-wrap:wrap;margin-bottom:20px}
+  h1{font-size:19px;margin:0;font-weight:600;letter-spacing:.3px}
+  h1 span{color:var(--dim);font-weight:400;font-size:13px;margin-left:8px}
+  .actions{display:flex;gap:9px;flex-wrap:wrap}
+  button{background:var(--card2);color:var(--txt);border:1px solid var(--line);
+         padding:8px 15px;border-radius:8px;cursor:pointer;font-size:13px;
+         transition:.15s;font-family:inherit}
+  button:hover:not(:disabled){background:#262b36;border-color:#3a4150}
+  button:disabled{opacity:.5;cursor:default}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover:not(:disabled){background:#3d7ae8}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+         gap:12px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:15px 16px}
+  .card .k{color:var(--dim);font-size:12px;margin-bottom:7px;letter-spacing:.2px}
+  .card .v{font-size:20px;font-weight:600;line-height:1.25}
+  .card .v.small{font-size:15px;font-weight:500;line-height:1.45}
+  .card .sub{color:var(--dim);font-size:12px;margin-top:5px;line-height:1.4}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;
+         padding:17px 18px;margin-bottom:18px}
+  .panel h2{font-size:14px;margin:0 0 13px;font-weight:600;
+            display:flex;align-items:center;gap:8px}
+  .panel h2 .tag{font-size:11px;color:var(--dim);font-weight:400}
+
+  .today-row{display:flex;align-items:center;gap:11px;padding:9px 0;
+             border-bottom:1px dashed var(--line)}
+  .today-row:last-child{border-bottom:none}
+  .pill{font-size:11px;padding:2px 9px;border-radius:20px;
+        background:#2a3550;color:#9db8ff;white-space:nowrap}
+  .pill.end{background:#3a2f45;color:#d0a9ff}
+
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal .hd{color:var(--dim);font-size:11px;text-align:center;padding:3px 0}
+  .day{aspect-ratio:1;border-radius:7px;background:var(--card2);
+       display:flex;flex-direction:column;align-items:center;justify-content:center;
+       font-size:11px;color:var(--dim);border:1px solid transparent;position:relative;
+       cursor:default;transition:.12s}
+  .day.has{background:#16382a;color:#9be8bf;border-color:#22543c;cursor:pointer}
+  .day.has:hover{border-color:var(--ok)}
+  .day.today{outline:2px solid var(--accent);outline-offset:1px}
+  .day.blank{background:transparent;border:none}
+  .day .d{font-size:12px;font-weight:600;color:var(--txt)}
+  .day.has .d{color:#c9ffdf}
+  .day .n{font-size:9px;opacity:.75;margin-top:1px}
+
+  .runs{width:100%;border-collapse:collapse;font-size:12.5px}
+  .runs th{text-align:left;color:var(--dim);font-weight:500;padding:7px 9px;
+           border-bottom:1px solid var(--line);font-size:11.5px}
+  .runs td{padding:8px 9px;border-bottom:1px solid #23272f}
+  .runs tr:last-child td{border-bottom:none}
+  .runs a{color:var(--accent);text-decoration:none}
+  .runs a:hover{text-decoration:underline}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(80px);
+         background:#22262f;border:1px solid var(--line);color:var(--txt);
+         padding:11px 20px;border-radius:9px;font-size:13px;opacity:0;
+         transition:.25s;pointer-events:none;max-width:88vw;z-index:99}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{border-color:#5a2b2b;background:#2a1d1d}
+  .loading{color:var(--dim);font-size:13px;padding:16px 0;text-align:center}
+  .err-box{color:var(--bad);font-size:13px;line-height:1.6;
+           background:#241a1a;border:1px solid #4a2b2b;border-radius:8px;padding:12px 14px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>工学云打卡面板 <span id="whoami"></span></h1>
+    <div class="actions">
+      <button id="btn-refresh">刷新</button>
+      <button id="btn-trigger" class="primary">立即打卡</button>
+    </div>
+  </header>
+
+  <div id="global-err" class="err-box hidden" style="margin-bottom:16px"></div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="k">今日状态</div>
+      <div class="v" id="today-state">—</div>
+      <div class="sub" id="today-sub">加载中…</div>
+    </div>
+    <div class="card">
+      <div class="k">今日打卡时间</div>
+      <div class="v small" id="today-time">—</div>
+      <div class="sub" id="today-type">—</div>
+    </div>
+    <div class="card">
+      <div class="k">连续打卡</div>
+      <div class="v" id="streak">—</div>
+      <div class="sub">按天计算，含今天</div>
+    </div>
+    <div class="card">
+      <div class="k">记录总数</div>
+      <div class="v" id="total">—</div>
+      <div class="sub" id="range">最近 45 天</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>今日明细</h2>
+    <div id="today-detail"><div class="loading">加载中…</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>打卡日历 <span class="tag">绿色=有记录，点击查看当天明细</span></h2>
+    <div class="cal" id="cal"></div>
+  </div>
+
+  <div class="panel">
+    <h2>云端运行记录 <span class="tag" id="runs-sub"></span></h2>
+    <div id="runs-wrap"><div class="loading">加载中…</div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const WD = ['一','二','三','四','五','六','日'];
+const TYPE = {START:'上班', END:'下班'};
+
+function toast(msg, isErr){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.className = 'toast'; }, 4200);
+}
+
+async function getJSON(url, opt){
+  const r = await fetch(url, opt);
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  return await r.json();
+}
+
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderSummary(d){
+  if(d.error){
+    $('#global-err').classList.remove('hidden');
+    $('#global-err').textContent = '读取打卡数据失败：' + d.error +
+      '\n（若持续失败，检查 credentials.json 是否正确、密码是否改过）';
+    $('#today-state').textContent = '—';
+    return;
+  }
+  $('#global-err').classList.add('hidden');
+  $('#whoami').textContent = d.phone ? ('账号 ' + d.phone) : '';
+
+  // 今日状态
+  const st = $('#today-state');
+  if(d.today_done){
+    st.textContent = '已打卡';
+    st.className = 'v ok';
+  }else{
+    st.textContent = '未打卡';
+    st.className = 'v bad';
+  }
+  $('#today-sub').textContent = '服务器时间 ' + d.server_time.slice(11,19);
+
+  // 今日时间/类型
+  if(d.today_records.length){
+    const r = d.today_records[0];
+    $('#today-time').textContent = r.time;
+    $('#today-type').innerHTML = '<span class="pill' + (r.type==='END'?' end':'') + '">' +
+      (TYPE[r.type] || r.type) + '</span>';
+    $('#today-time').className = 'v small ok';
+  }else{
+    $('#today-time').textContent = '—';
+    $('#today-type').textContent = '今天还没有记录';
+    $('#today-time').className = 'v small bad';
+  }
+
+  $('#streak').textContent = d.streak + ' 天';
+  $('#total').textContent = d.total_records + ' 条';
+
+  // 今日明细
+  const box = $('#today-detail');
+  if(!d.today_records.length){
+    box.innerHTML = '<div class="loading" style="color:#ff5d5d">今天还没有打卡记录。' +
+      '可点右上角「立即打卡」，或等云端定时任务（早 7:00~8:30）。</div>';
+  }else{
+    box.innerHTML = d.today_records.map(r => `
+      <div class="today-row">
+        <span class="pill${r.type==='END'?' end':''}">${esc(TYPE[r.type]||r.type)}</span>
+        <strong>${esc(r.time)}</strong>
+        <span style="color:#8b93a3;flex:1">${esc(r.address)}</span>
+        <span style="color:#5f677a;font-size:11.5px">${esc(r.longitude)}, ${esc(r.latitude)}</span>
+      </div>`).join('');
+  }
+
+  // 日历
+  const cal = $('#cal');
+  let html = WD.map(w => `<div class="hd">${w}</div>`).join('');
+  const days = d.calendar;
+  if(days.length){
+    const firstWd = (new Date(days[0].date + 'T00:00:00').getDay() + 6) % 7;
+    for(let i=0;i<firstWd;i++) html += '<div class="blank"></div>';
+    days.forEach(x => {
+      const cls = ['day'];
+      if(x.count) cls.push('has');
+      if(x.date === d.today) cls.push('today');
+      const dd = x.date.slice(8);
+      html += `<div class="${cls.join(' ')}" title="${x.date}  ${x.count} 条"` +
+        (x.count ? ` data-date="${x.date}"` : '') + `>
+        <span class="d">${dd}</span><span class="n">${x.count ? x.count+'条' : ''}</span></div>`;
+    });
+  }
+  cal.innerHTML = html;
+
+  // 点击日历某天 -> toast 显示当天明细
+  cal.querySelectorAll('[data-date]').forEach(el => {
+    el.onclick = () => {
+      const day = days.find(x => x.date === el.dataset.date);
+      if(!day) return;
+      const txt = day.records.map(r => `${r.time} ${TYPE[r.type]||r.type}`).join('　');
+      toast(`${day.date}：${txt}`);
+    };
+  });
+}
+
+function renderRuns(d){
+  const w = $('#runs-wrap');
+  if(d.error){
+    w.innerHTML = `<div class="loading">${esc(d.error)}</div>`;
+    $('#runs-sub').textContent = '';
+    return;
+  }
+  if(!d.runs.length){
+    w.innerHTML = '<div class="loading">还没有运行记录</div>';
+    return;
+  }
+  $('#runs-sub').textContent = '共 ' + d.runs.length + ' 条';
+  const rows = d.runs.map(r => {
+    let s = '—', c = '';
+    if(r.status === 'completed'){
+      if(r.conclusion === 'success'){ s='成功'; c='ok'; }
+      else { s = r.conclusion || '失败'; c='bad'; }
+    }else if(r.status === 'in_progress'){ s='运行中'; c='warn'; }
+    else { s = r.status; c='warn'; }
+    const t = r.created.replace('T',' ').replace('Z','').slice(0,19);
+    return `<tr>
+      <td class="${c}">${esc(s)}</td>
+      <td>${esc(r.event === 'schedule' ? '定时' : r.event === 'workflow_dispatch' ? '手动/开机' : r.event)}</td>
+      <td style="color:#8b93a3">${esc(t)}</td>
+      <td><a href="${esc(r.url)}" target="_blank" rel="noopener">查看日志 #${r.id}</a></td>
+    </tr>`;
+  }).join('');
+  w.innerHTML = `<table class="runs">
+    <thead><tr><th>结果</th><th>触发</th><th>UTC 时间</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+let busy = false;
+async function refresh(){
+  if(busy) return;
+  busy = true;
+  $('#btn-refresh').disabled = true;
+  try{
+    const [sum, runs] = await Promise.all([
+      getJSON('/api/summary').catch(e => ({error:e.message})),
+      getJSON('/api/runs').catch(e => ({error:e.message}))
+    ]);
+    renderSummary(sum);
+    renderRuns(runs);
+  }finally{
+    busy = false;
+    $('#btn-refresh').disabled = false;
+  }
+}
+
+$('#btn-refresh').onclick = () => { toast('刷新中…'); refresh(); };
+
+$('#btn-trigger').onclick = async () => {
+  if(!confirm('确定立即触发一次云端打卡？\n（若今天已有记录，脚本会自动跳过，不会重复打卡）')) return;
+  const b = $('#btn-trigger');
+  b.disabled = true; b.textContent = '触发中…';
+  try{
+    const d = await getJSON('/api/trigger', {method:'POST'});
+    if(d.ok){
+      toast(d.message || '已触发');
+      setTimeout(refresh, 12000);
+    }else{
+      toast('触发失败：' + d.error, true);
+    }
+  }catch(e){
+    toast('触发失败：' + e.message, true);
+  }finally{
+    b.disabled = false; b.textContent = '立即打卡';
+  }
+};
+
+refresh();
+setInterval(refresh, 60000);   // 每分钟自动刷新
+</script>
+</body>
+</html>
