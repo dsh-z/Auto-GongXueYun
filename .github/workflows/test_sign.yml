@@ -1,0 +1,30 @@
+name: "接口测试"
+
+# 仅手动触发：绕过一天一条去重，强制试打一次，用于验证 v6 接口。
+# 会产生真实打卡记录，正式流程不要跑这个。
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+
+    - name: Install depend
+      run: |
+        python -m pip install --upgrade pip
+        pip install certifi cffi charset-normalizer cryptography idna
+        pip install numpy opencv-python-headless pycparser requests urllib3
+
+    - name: Test sign
+      env:
+        USER: ${{ secrets.USER }}
+        TZ: Asia/Shanghai
+      run: |
+        python test_sign.py
