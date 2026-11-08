@@ -70,17 +70,16 @@ def send_sign_in(user_info, timeout):
         sign_info = create_sign(userId + "student")
         planId = get_plan_id(user_info, token, sign_info)
 
-        # 今日是否已有记录：True=已打 / False=未打 / None=查询失败
-        # 查询失败时按「已打」处理是危险的（会漏卡），按「未打」处理也危险（会重复）。
-        # 这里选择放弃本次、等下次触发，因为一天有多次机会，宁可漏一次也不重复。
-        already = check_sign(token, DAILY_SIGN_TYPE, user_info)
+        # 今日是否已有任意记录：True=已打 / False=未打 / None=查询失败
+        # 传 "ANY" 而不是 DAILY_SIGN_TYPE：只要当天有 START 或 END 任一记录就跳过，
+        # 这样即使你先在 App 里手动打过卡，脚本也不会再补一条。
+        already = check_sign(token, "ANY", user_info)
         if already is None and not RepeatCheckIn:
             msg = f"{prefix}今日打卡状态未知（查询接口异常），本次跳过，等待下次触发"
             print(msg + "\n")
             global_sign_results.append(msg + "\n")
             return
 
-        # 额外确认：只要今天已存在任意类型记录就跳过，保证「一天一条」
         if already and not RepeatCheckIn:
             print(f"{prefix}今日已有打卡记录, 任务跳过。\n")
             global_sign_results.append(f"{prefix}今日已有记录，跳过\n")

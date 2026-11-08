@@ -42,7 +42,16 @@ def check_sign(check_sign_token, sign_type, user=None):
         print(f"   查询返回结构异常，已跳过重复检查: {str(records)[:120]}")
         return None
 
-    # 检查是否有过打卡记录
+    # sign_type 传 "ANY" 表示「当天有没有任何一条记录」，用于保证一天只打一条。
+    # 否则只比对指定类型，会出现：你手动打过下班卡(END)，脚本仍认为上班卡
+    # 没打而再补一条，当天就变成两条 —— 这正是"一天一条"要防的情况。
+    if sign_type == "ANY":
+        for record in records:
+            if record.get("type") in ("START", "END"):
+                return True
+        return False
+
+    # 检查是否有过指定类型的打卡记录
     for record in records:
         if record.get("type") == sign_type:
             # 打过卡
