@@ -32,7 +32,9 @@ def get_token(user):
         "loginType": "android",
         "uuid": str(uuid.uuid4()).replace("-", ""),
         "device": "android",
-        "version": "5.16.0",
+        # 必须与真实安装包一致。实测 App 5.43.6 是当前版本，
+        # 填过旧号会被服务端识别为过期客户端。
+        "version": "5.43.6",
         "t": aes_encrypt(str(int(time.time() * 1000))),
     }
     rsp = _post_request(
