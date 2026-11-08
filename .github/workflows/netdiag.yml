@@ -1,0 +1,67 @@
+name: "网络诊断"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+    - name: 1. DNS 解析
+      run: |
+        echo "=== dig / nslookup ==="
+        (command -v dig >/dev/null && dig +short api.moguding.net) || \
+        (command -v nslookup >/dev/null && nslookup api.moguding.net) || \
+        getent hosts api.moguding.net
+        echo
+        echo "=== /etc/resolv.conf ==="
+        cat /etc/resolv.conf
+
+    - name: 2. TCP 连通性（443 vs 9000）
+      run: |
+        for hp in "api.moguding.net 443" "api.moguding.net 9000" "www.moguding.net 443" "1.1.1.1 443"; do
+          set -- $hp
+          echo "--- $1:$2 ---"
+          timeout 12 bash -c "cat < /dev/null > /dev/tcp/$1/$2" 2>&1 \
+            && echo "  OPEN" || echo "  FAILED"
+        done
+
+    - name: 3. curl 各端口
+      run: |
+        for u in "https://api.moguding.net:9000/session/captcha/v1/get" \
+                 "https://api.moguding.net/" \
+                 "https://www.moguding.net/"; do
+          echo "--- $u ---"
+          curl -sS -o /dev/null -m 15 -w "  http=%{http_code} ip=%{remote_ip} time=%{time_total}s\n" "$u" 2>&1 || echo "  curl failed"
+        done
+
+    - name: 4. Python 栈复现（与脚本同环境）
+      run: |
+        python3 - <<'PY'
+        import socket, ssl
+        for port in (443, 9000):
+            try:
+                infos = socket.getaddrinfo("api.moguding.net", port, proto=socket.IPPROTO_TCP)
+                print("DNS ok port=%d -> %s" % (port, [i[4][0] for i in infos][:3]))
+            except Exception as e:
+                print("DNS FAIL port=%d -> %s" % (port, e)); continue
+            try:
+                s = socket.create_connection(("api.moguding.net", port), timeout=12)
+                print("  TCP ok port=%d" % port)
+                try:
+                    ctx = ssl.create_default_context()
+                    ss = ctx.wrap_socket(s, server_hostname="api.moguding.net")
+                    print("  TLS ok port=%d %s" % (port, ss.version()))
+                    ss.close()
+                except Exception as e:
+                    print("  TLS FAIL port=%d -> %s" % (port, e))
+            except Exception as e:
+                print("  TCP FAIL port=%d -> %s" % (port, e))
+        PY
+
+    - name: 5. 出网出口 IP（判断是否与工学云黑名单有关）
+      run: |
+        curl -sS -m 15 https://api.ipify.org || echo "ipify failed"
+        echo
+        curl -sS -m 15 https://ifconfig.me/ip || echo "ifconfig failed"
